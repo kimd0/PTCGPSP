@@ -4,6 +4,8 @@ from utils.adb_client import ADBClient
 from utils.adb_interaction import ADBInteraction
 from modules.game_interaction import GameInteraction
 from modules.game_manager import GameManager
+from modules.gui import launch_gui
+
 
 def main():
     """Main execution function."""
@@ -53,18 +55,11 @@ def main():
             backup_success = game.backup_account(device_id, "./backup")
             if backup_success:
                 print(f"Account backup successful for {player['playerName']}")
-
-            # Simulated user interaction
-            adb.simulate_tap(device_id, 100, 200)
-
-            # Take and save a screenshot
-            screenshot_path = adb.take_screenshot(device_id, return_bitmap=False)
-            if screenshot_path:
-                print(f"Screenshot saved to {screenshot_path}")
             """
 
         else:
             print(f"Failed to connect {player['playerName']} (ADB Port: {port}).")
 
 if __name__ == "__main__":
-    main()
+    #main()
+    launch_gui()

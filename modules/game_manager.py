@@ -1,156 +1,239 @@
 import time
 import random
+import asyncio
 from modules.game_interaction import GameInteraction
-from modules.image_search import template_match, search_until_found
+from modules.image_search import template_match, search_until_found, search_until_found_pixel
 from utils.adb_interaction import ADBInteraction
 
 class GameManager:
-    def __init__(self, game, adb, device_id):
+    def __init__(self, game, adb, device_name, device_id, log):
         """Initialize with an instance of GameInteraction."""
         self.game = game
         self.adb = adb
+        self.device_name = device_name
         self.device_id = device_id
+        self.log = log
         self.current_step = 0
 
-    def automated_gameplay(self):
-        self.do_opening()
-        self.do_nickname()
-        #self.do_tutorial()
+    async def automated_gameplay(self):
+        await self.do_opening()
+        await self.do_nickname()
+        await self.do_firstpack()
+        await self.do_tutorial()
         return
 
-    def do_opening(self):
+    async def do_opening(self):
+        self.log.emit(f"⏳ [인스턴스 {self.device_name}] 게임 시작 중...")
         # Restart game with full data clearance
         self.game.restart_game(self.device_id, clear=True)
 
-        # Check the title screen
-        if not search_until_found(self.adb, self.device_id, "data/images/title.png"):
-            print("Title screen not found.")
-            self.restart_game()
-            return
-        self.adb.simulate_tap(self.device_id, 100, 100)
-        time.sleep(1)
+        # Check title screen
+        await self.find_and_tap("data/images/title.png", 5)
 
         # Enable speed mode
-        self.adb.simulate_tap(self.device_id, 35, 145)
-        time.sleep(1)
+        await self.find_and_tap("data/images/mod.png", 1)
         self.adb.simulate_swipe(self.device_id, 35, 260, 200, 260, duration=300)
-        self.adb.simulate_tap(self.device_id, 330, 500)
+        await self.find_and_tap("data/images/mod_minimize.png", 1)
 
-        # Set birthday
-        if not search_until_found(self.adb, self.device_id, "data/images/birth_ok.png"):
+        # Check birthday screen
+        if not await search_until_found(self.adb, self.device_id, "data/images/birth_ok.png"):
             print("Birth screen not found.")
-            self.restart_game()
-            return
-        self.adb.simulate_tap(self.device_id, 150, 700)
-        time.sleep(0.5)
-        self.adb.simulate_swipe(self.device_id, 150, 440, 150, 900, duration=300)
-        self.adb.simulate_tap(self.device_id, 150, 550)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 400, 700)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 400, 600)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 270, 860)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 390, 640)
+            return False
 
-        # Agree to terms
-        if not search_until_found(self.adb, self.device_id, "data/images/term.png"):
-            print("Terms screen not found.")
-            self.restart_game()
-            return
-        self.adb.simulate_tap(self.device_id, 260, 500)
-        if not search_until_found(self.adb, self.device_id, "data/images/term_x.png"):
-            print("Terms screen not found.")
-            self.restart_game()
-            return
-        self.adb.simulate_tap(self.device_id, 260, 860)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 260, 580)
-        if not search_until_found(self.adb, self.device_id, "data/images/term_x.png"):
-            print("Terms screen not found.")
-            self.restart_game()
-            return
-        self.adb.simulate_tap(self.device_id, 260, 860)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 260, 645)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 260, 700)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 260, 865)
-        time.sleep(0.5)
+        # Set year
+        self.adb.simulate_tap(self.device_id, 150, 700)
+        await asyncio.sleep(0.5)
+        self.adb.simulate_swipe(self.device_id, 150, 440, 150, 900, duration=200)
+        self.adb.simulate_tap(self.device_id, 150, 550)
+        await asyncio.sleep(0.5)
+
+        # Set month
+        self.adb.simulate_tap(self.device_id, 400, 700)
+        await asyncio.sleep(0.5)
+        self.adb.simulate_tap(self.device_id, 400, 600)
+        await asyncio.sleep(0.5)
+
+        # Press OK
+        self.adb.simulate_tap(self.device_id, 270, 860)
+        await asyncio.sleep(0.5)
+
+        # Press OK again
+        await self.find_and_tap("data/images/birth_ok2.png", 1)
+
+        # Read terms
+        await self.find_and_tap("data/images/term1.png", 1)
+        await self.find_and_tap("data/images/term_x.png", 1)
+        await self.find_and_tap("data/images/term2.png", 1)
+        await self.find_and_tap("data/images/term_x.png", 1)
+
+        # Agree to terms and ok
+        self.adb.simulate_tap(self.device_id, 85, 645)
+        await asyncio.sleep(0.2)
+        self.adb.simulate_tap(self.device_id, 85, 710)
+        await asyncio.sleep(0.2)
+        self.adb.simulate_tap(self.device_id, 270, 860)
+        await asyncio.sleep(0.2)
 
         # Set data usage
         self.adb.simulate_tap(self.device_id, 160, 475)
-        time.sleep(0.2)
+        await asyncio.sleep(0.2)
         self.adb.simulate_tap(self.device_id, 160, 610)
-        time.sleep(0.2)
+        await asyncio.sleep(0.2)
         self.adb.simulate_tap(self.device_id, 160, 745)
-        time.sleep(0.2)
+        await asyncio.sleep(0.2)
         self.adb.simulate_tap(self.device_id, 270, 865)
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
 
         # No sync
         self.adb.simulate_tap(self.device_id, 260, 590)
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
         self.adb.simulate_tap(self.device_id, 270, 820)
-        time.sleep(2)
+        await asyncio.sleep(2)
+
+        # Check for movie
+        if not await search_until_found_pixel(self.adb, self.device_id, (2, 2, 2), tolerance=3):
+            print("Movie screen not found.")
+            return False
 
         # Skip movie
         self.adb.simulate_tap(self.device_id, 485, 900)
-        time.sleep(0.1)
+        await asyncio.sleep(0.1)
         self.adb.simulate_tap(self.device_id, 485, 900)
-        time.sleep(0.1)
+        await asyncio.sleep(0.1)
         self.adb.simulate_tap(self.device_id, 485, 900)
-        time.sleep(0.1)
+        await asyncio.sleep(0.1)
         self.adb.simulate_tap(self.device_id, 485, 900)
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
+
 
         self.adb.simulate_tap(self.device_id, 270, 770)
-        time.sleep(0.5)
+        await asyncio.sleep(0.3)
         self.adb.simulate_tap(self.device_id, 400, 770)
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
         return
 
-    def do_nickname(self):
-        if not search_until_found(self.adb, self.device_id, "data/images/nickname.png"):
-            print("Nickname screen not found.")
-            self.restart_game()
-            return
+    async def do_nickname(self):
+        await self.find_and_tap("data/images/nickname.png", 1)
         self.adb.simulate_tap(self.device_id, 260, 410)
-        time.sleep(1)
-        self.adb.simulate_tap(self.device_id, 260, 410)
-        time.sleep(1)
+        await asyncio.sleep(1)
         self.adb.simulate_string(self.device_id, self.get_random_nickname())
-        time.sleep(1)
-        self.adb.simulate_tap(self.device_id, 390, 640)
-        time.sleep(0.5)
-        self.adb.simulate_tap(self.device_id, 260, 640)
-        time.sleep(0.5)
-        return
+        await asyncio.sleep(1)
 
-    def do_tutorial(self):
-        return
+        await self.find_and_tap("data/images/nick_ok1.png", 1)
+        await self.find_and_tap("data/images/nick_ok2.png", 1)
+        await self.find_and_tap("data/images/nick_ok1.png", 1)
+        return True
 
-    def do_add_friend(self):
-        return
+    async def do_firstpack(self):
+        if not await search_until_found(self.adb, self.device_id, "data/images/firstpack.png"):
+            print("First pack screen not found.")
+            return False
 
-    def do_pack_opening(self):
-        return
+        # Tap m2 pack
+        self.adb.simulate_tap(self.device_id, 260, 550)
+        await asyncio.sleep(0.3)
+        self.adb.simulate_tap(self.device_id, 260, 750)
 
-    def restart_game(self):
-        self.game.restart_game(self.device_id, clear=True)
-        self.current_step = 0
-        self.automated_gameplay()
-        return
+        if not await search_until_found(self.adb, self.device_id, "data/images/firstpack_open.png"):
+            print("First pack open screen not found.")
+            return False
+
+        # Open pack swiping
+        for _ in range(5):
+            self.adb.simulate_swipe(self.device_id, 40, 550, 530, 550, duration=100)
+
+        await asyncio.sleep(0.3)
+
+        for _ in range(10):
+            self.adb.simulate_tap(self.device_id, 270, 400)
+            await asyncio.sleep(0.1)
+
+        if not await search_until_found(self.adb, self.device_id, "data/images/firstpack_swipe.png"):
+            print("First pack swipe screen not found.")
+            return False
+
+        for _ in range(5):
+            self.adb.simulate_swipe(self.device_id, 260, 800, 260, 40, duration=100)
+            await asyncio.sleep(0.1)
+
+        if not await search_until_found(self.adb, self.device_id, "data/images/firstpack_logo.png"):
+            print("First pack book screen not found.")
+            return False
+
+        for _ in range(5):
+            self.adb.simulate_tap(self.device_id, 270, 640)
+            await asyncio.sleep(0.1)
+
+        await self.find_and_tap("data/images/firstpack_next.png", 1)
+        await self.find_and_tap("data/images/firstpack_ok.png", 1)
+        return True
+
+    async def do_tutorial(self):
+        if not await search_until_found_pixel(self.adb, self.device_id, (75, 251, 234), tolerance=3):
+            print("Gray screen not found.")
+            return False
+        await self.find_and_tap("data/images/mission.png", 1)
+        await self.find_and_tap("data/images/mission_get1.png", 1)
+        await self.find_and_tap("data/images/mission_get1.png", 1)
+        await self.find_and_tap("data/images/mission_get2.png", 1)
+        await self.find_and_tap("data/images/mission_ok.png", 1)
+
+        await asyncio.sleep(0.5)
+        self.adb.simulate_tap(self.device_id, 270, 500)
+        await asyncio.sleep(5)
+
+        for _ in range(5):
+            self.adb.simulate_tap(self.device_id, 270, 500)
+            await asyncio.sleep(0.1)
+
+        await asyncio.sleep(5)
+
+        for _ in range(5):
+            self.adb.simulate_tap(self.device_id, 270, 500)
+            await asyncio.sleep(0.1)
+
+        await self.find_and_tap("data/images/mission_ok.png", 1)
+        await self.find_and_tap("data/images/realpack_open.png", 1)
+        await self.find_and_tap("data/images/realpack_pass.png", 2)
+
+        # Open pack swiping
+        for _ in range(5):
+            self.adb.simulate_swipe(self.device_id, 40, 550, 530, 550, duration=100)
+
+        # Tap card
+        for _ in range(10):
+            self.adb.simulate_tap(self.device_id, 270, 480)
+            await asyncio.sleep(0.1)
+
+        await self.find_and_tap("data/images/realpack_next.png", 1)
+        await self.find_and_tap("data/images/realpack_pass.png", 1)
+        await self.find_and_tap("data/images/realpack_next.png", 1)
+        await self.find_and_tap("data/images/mission_ok.png", 1)
+
+        for _ in range(10):
+            self.adb.simulate_tap(self.device_id, 270, 480)
+            await asyncio.sleep(0.2)
+
+        return True
+
+    async def do_add_friend(self):
+        return True
+
+    async def do_pack_opening(self):
+        return True
 
     def get_random_nickname(self):
         with open("nickname.txt", "r", encoding="utf-8") as file:
             words = file.read().splitlines()
         return random.choice(words)
 
-    def find_and_tap(self, template_path):
-        x, y = search_until_found(self.adb, self.device_id, template_path)
+    async def find_and_tap(self, template_path, taps=1):
+        result = await search_until_found(self.adb, self.device_id, template_path)
+
+        if result is not None:
+            x, y = result
+
         if x and y:
-            self.adb.simulate_tap(self.device_id, x, y)
-        self.restart_game()
+            for _ in range(taps):
+                self.adb.simulate_tap(self.device_id, x, y)
+                await asyncio.sleep(0.05)

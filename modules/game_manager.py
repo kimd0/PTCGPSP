@@ -544,7 +544,7 @@ class GameManager:
         await self.find_and_tap("data/images/delete_btn2.png", 1)
         await asyncio.sleep(0.2)
         await self.find_and_tap("data/images/delete_ok.png", 1)
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(2)
 
         self.game.close_game(self.device_id)
         self.game.delete_account(self.device_id)

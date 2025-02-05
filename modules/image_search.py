@@ -1,12 +1,69 @@
 import logging
+import os
 import cv2
 import numpy as np
 import asyncio
 from PIL import Image
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 from utils.adb_interaction import ADBInteraction
 
 logging.basicConfig(level=logging.INFO)
+
+import asyncio
+import cv2
+import logging
+import os
+import numpy as np
+from typing import Dict, Optional
+
+class TemplateCache:
+    """싱글톤 패턴으로 템플릿 이미지를 캐싱하는 클래스"""
+    _instance = None
+    _cache: Dict[str, np.ndarray] = {}
+    _image_dir = os.path.abspath("./data/images")  # 절대 경로 변환
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TemplateCache, cls).__new__(cls)
+        return cls._instance
+
+    async def load_template(self, template_path: str) -> Optional[np.ndarray]:
+        """단일 템플릿을 로드 및 캐싱 (경로 정규화 적용)"""
+        template_path = os.path.abspath(template_path)  # 절대 경로로 변환
+
+        if template_path in self._cache:
+            return self._cache[template_path]
+
+        loop = asyncio.get_running_loop()
+        template = await loop.run_in_executor(None, cv2.imread, template_path, cv2.IMREAD_GRAYSCALE)
+
+        if template is None:
+            logging.error(f"Error: Template {template_path} not found.")
+            return None
+
+        self._cache[template_path] = template
+        return template
+
+    async def load_all_templates(self):
+        """모든 템플릿을 미리 캐싱 (경로 정규화 적용)"""
+        if not os.path.exists(self._image_dir):
+            logging.error(f"Error: Template directory {self._image_dir} not found.")
+            return
+
+        tasks = []
+        for filename in os.listdir(self._image_dir):
+            if filename.lower().endswith(".png"):
+                template_path = os.path.abspath(os.path.join(self._image_dir, filename))  # 절대 경로 변환
+                tasks.append(self.load_template(template_path))
+
+        await asyncio.gather(*tasks)
+        logging.info(f"Loaded {len(self._cache)} templates into cache.")
+
+    def get_template(self, template_path: str) -> Optional[np.ndarray]:
+        """캐싱된 템플릿 반환 (경로 정규화 적용)"""
+        template_path = os.path.abspath(template_path)  # 절대 경로 변환
+        return self._cache.get(template_path, None)
+
 
 def image_to_array(image: Image) -> np.ndarray:
     """
@@ -17,7 +74,7 @@ def image_to_array(image: Image) -> np.ndarray:
     """
     return np.array(image.convert("L"))  # Convert to grayscale
 
-async def template_match(adb_interaction: ADBInteraction, device_id: str, template_path: str, threshold: float = 0.9) -> Optional[Tuple[int, int]]:
+async def template_match(adb_interaction: ADBInteraction, device_id: str, template_path: str, threshold: float = 0.80) -> Optional[Tuple[int, int]]:
     """
     Capture a screenshot and perform template matching.
 
@@ -36,6 +93,9 @@ async def template_match(adb_interaction: ADBInteraction, device_id: str, templa
     if screenshot is None:
         logging.error("Error: Screenshot not available.")
         return None
+
+    template_cache = TemplateCache()
+    template = template_cache.get_template(os.path.abspath(template_path))
 
     if template is None:
         logging.error("Error: Template not available.")

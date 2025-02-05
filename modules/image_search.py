@@ -87,9 +87,6 @@ async def template_match(adb_interaction: ADBInteraction, device_id: str, templa
     # Capture a fresh screenshot (returns a PIL Image)
     screenshot = await adb_interaction.take_screenshot(device_id, return_bitmap=True)
 
-    # Load the template image
-    template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
-
     if screenshot is None:
         logging.error("Error: Screenshot not available.")
         return None
@@ -145,6 +142,46 @@ async def search_until_found(adb_interaction: ADBInteraction, device_id: str, te
 
     logging.info("Image not found after max attempts.")
     return None
+
+
+async def count_template_matches(adb_interaction: ADBInteraction, device_id: str, template_path: str,
+                                 threshold: float = 0.95, y_limit: int = None) -> int:
+    """
+    Capture a screenshot and count the number of matches for the template image,
+    searching only up to the specified y-axis pixel (if provided).
+
+    :param adb_interaction: Instance of ADBInteraction to take screenshots.
+    :param device_id: The ADB device ID.
+    :param template_path: Path to the template image file.
+    :param threshold: Matching confidence threshold (0 to 1).
+    :param y_limit: The y-axis pixel limit (height) up to which to search the screenshot.
+                    If None, the entire screenshot is used.
+    :return: The number of times the template was found in the (cropped) screenshot.
+    """
+    # Capture a fresh screenshot (returns a PIL Image)
+    screenshot = await adb_interaction.take_screenshot(device_id, return_bitmap=True)
+    if screenshot is None:
+        logging.error("Error: Screenshot not available.")
+        return 0
+
+    template_cache = TemplateCache()
+    template = template_cache.get_template(os.path.abspath(template_path))
+    if template is None:
+        logging.error("Error: Template not available.")
+        return 0
+
+    screenshot_array = image_to_array(screenshot)
+
+    if y_limit is not None:
+        screenshot_height = screenshot_array.shape[0]
+        if y_limit < screenshot_height:
+            screenshot_array = screenshot_array[:y_limit, :]
+
+    result = cv2.matchTemplate(screenshot_array, template, cv2.TM_CCOEFF_NORMED)
+    loc = np.where(result >= threshold)
+    matches = list(zip(*loc[::-1]))  # 좌표 배열을 (x, y) 튜플의 리스트로 변환
+
+    return len(matches)
 
 async def pixel_search(adb_interaction: ADBInteraction, device_id: str, target_color: Tuple[int, int, int], tolerance: int = 10) -> Optional[Tuple[int, int]]:
     """

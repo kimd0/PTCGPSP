@@ -89,7 +89,7 @@ class ADBInteraction:
         finally:
             # Ensure remote file is removed even if pull fails
             try:
-                self.remove(device_id, remote_path)
+                self.remove(device_id, remote_path, recursive=False)
             except Exception as e:
                 logging.warning(f"Failed to remove remote screenshot file {remote_path}: {e}")
 
@@ -126,7 +126,7 @@ class ADBInteraction:
         filename = self._generate_hashed_filename()
         save_path = os.path.join(self.screenshot_dir, filename)
         self.pull(device_id, remote_path, save_path)
-        self.remove(device_id, remote_path)
+        self.remove(device_id, remote_path, recursive=False)
 
         if return_bitmap:
             while not os.path.exists(save_path):
@@ -153,9 +153,21 @@ class ADBInteraction:
         command = f"-s {device_id} shell am force-stop {package_name}"
         return self._run_command(command)
 
-    def remove(self, device_id: str, path: str):
+    def is_app_running(self, device_id: str, package: str) -> bool:
+        """Check if an app (identified by its package name) is running on the device."""
+        command = f"-s {device_id} shell pidof {package}"
+        output = self._run_command(command)
+
+        if output is None or not output.strip():
+            return False
+        return True
+
+    def remove(self, device_id: str, path: str, recursive: bool):
         """Remove a file or directory on the device."""
-        command = f"-s {device_id} shell rm -rf {path}"
+        if recursive:
+            command = f"-s {device_id} shell rm -rf {path}"
+        else:
+            command = f"-s {device_id} shell rm {path}"
         return self._run_command(command)
 
     def copy(self, device_id: str, src: str, dest: str):

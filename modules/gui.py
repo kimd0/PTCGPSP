@@ -148,9 +148,12 @@ class WorkerThread(QThread):
                 success = await self.current_task  # Await execution
 
                 result = await self.current_task
-                if result is not None and isinstance(result, tuple) and len(result) == 2:
+                if result is not None:
                     self.result = result
-                    self.log_signal.emit(f"✅ [인스턴스 {self.device_name}] 작업 완료. 닉네임: {result[0]}, 친구ID: {result[1]}")
+                    if self.task_kind == "gather":
+                        self.log_signal.emit(f"✅ [인스턴스 {self.device_name}] 작업 완료. 닉네임: {result[0]}, 친구ID: {result[1]}")
+                    else:
+                        self.log_signal.emit(f"✅ [인스턴스 {self.device_name}] 작업 완료.")
                     break  # 작업 성공 시 종료
                 else:
                     retry += 1
@@ -293,7 +296,7 @@ class MainGUI(QWidget):
 
         self.is_running = False
 
-        # ✅ "매크로" GroupBox
+        # "매크로" GroupBox
         macro_group = QGroupBox("매크로", self)
         macro_layout = QVBoxLayout()
 
@@ -315,7 +318,7 @@ class MainGUI(QWidget):
         macro_group.setLayout(macro_layout)
         main_layout.addWidget(macro_group)
 
-        # ✅ "기타" GroupBox
+        # 기타" GroupBox
         etc_group = QGroupBox("기타", self)
         etc_layout = QVBoxLayout()
 
@@ -424,6 +427,18 @@ class MainGUI(QWidget):
             self.stop_task()
             self.gather_btn.setText("팩 모으기 시작")
         else:
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("경고")
+            msg_box.setText("계속 진행 시 모든 인스턴스의 데이터가 초기화됩니다.\n계속 진행하시겠습니까?")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg_box.setDefaultButton(QMessageBox.StandardButton.No)
+
+            result = msg_box.exec()
+
+            if result == QMessageBox.StandardButton.No:
+                return
+
             self.start_task("gather")
             self.gather_btn.setText("팩 모으기 정지")
 
@@ -468,10 +483,9 @@ class MainGUI(QWidget):
         if worker.result is not None:
             self.task_results.append(worker.result)
 
-        self.is_running = False
-        self.gather_btn.setText("팩 모으기 시작")
-
         if not self.workers:
+            self.is_running = False
+            self.gather_btn.setText("팩 모으기 시작")
             self.open_btn.setEnabled(True)
             self.add_btn.setEnabled(True)
             with open(self.result_file_path, "w", encoding="utf-8") as f:
@@ -484,10 +498,9 @@ class MainGUI(QWidget):
         if worker in self.workers:
             self.workers.remove(worker)
 
-        self.is_running = False
-        self.open_btn.setText("팩 열기 시작")
-
         if not self.workers:
+            self.is_running = False
+            self.open_btn.setText("팩 열기 시작")
             self.gather_btn.setEnabled(True)
             self.add_btn.setEnabled(True)
 
@@ -496,16 +509,15 @@ class MainGUI(QWidget):
         if worker in self.workers:
             self.workers.remove(worker)
 
-        self.is_running = False
-        self.add_btn.setText("친구 추가 시작")
-
         if not self.workers:
+            self.is_running = False
+            self.add_btn.setText("친구 추가 시작")
             self.gather_btn.setEnabled(True)
             self.open_btn.setEnabled(True)
 
     def capture_screenshot(self):
         """Capture screenshot from the first connected device."""
-        self.update_log(f"{self.device_list['1']}로부터 스크린샷 시도")
+        print(self.adb.is_app_running(self.device_list['1'], self.game.package_name))
         saved_path = self.adb.take_screenshot_(self.device_list['1'], return_bitmap=False)
         self.update_log(f"Screenshot saved at {saved_path}.")
 

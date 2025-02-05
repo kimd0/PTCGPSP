@@ -24,6 +24,14 @@ class GameInteraction:
             return False
         return True
 
+    def close_game(self, device_id: str) -> bool:
+        """Start the game."""
+        result = self.adb_interaction.close_app(device_id, self.package_name)
+        if result is None:
+            logging.error(f"Error closing {self.package_name} on {device_id}")
+            return False
+        return True
+
     def restart_game(self, device_id: str, clear: bool = False) -> bool:
         """Force stop and restart the game. If `clear=True`, clear cache and delete account."""
         self.adb_interaction.close_app(device_id, self.package_name)
@@ -33,11 +41,10 @@ class GameInteraction:
 
     def clear_cache(self, device_id: str) -> bool:
         """Clear game cache data."""
-        result = self.adb_interaction.remove(device_id, self.cache_path)
+        result = self.adb_interaction.remove(device_id, self.cache_path, recursive=True)
         if result is None:
             logging.error(f"Error clearing cache for {self.package_name}")
             return False
-        time.sleep(2)  # Delay for cache clearance
         return True
 
     def backup_account(self, device_id: str, save_dir: str) -> bool:
@@ -52,7 +59,7 @@ class GameInteraction:
             return False
         time.sleep(1)
 
-        if self.adb_interaction.remove(device_id, self.sdcard_account_path) is None:
+        if self.adb_interaction.remove(device_id, self.sdcard_account_path, recursive=False) is None:
             logging.error(f"Error deleting temporary account file on {device_id}")
             return False
         time.sleep(1)
@@ -61,7 +68,7 @@ class GameInteraction:
 
     def delete_account(self, device_id: str) -> bool:
         """Delete account data from the game."""
-        result = self.adb_interaction.remove(device_id, self.remote_account_path)
+        result = self.adb_interaction.remove(device_id, self.remote_account_path, recursive=False)
         if result is None:
             logging.error(f"Error deleting account data on {device_id}")
             return False
@@ -79,7 +86,7 @@ class GameInteraction:
             return False
         time.sleep(1)
 
-        if self.adb_interaction.remove(device_id, self.sdcard_account_path) is None:
+        if self.adb_interaction.remove(device_id, self.sdcard_account_path, recursive=False) is None:
             logging.error(f"Error deleting temporary account file on {device_id}")
             return False
         time.sleep(1)

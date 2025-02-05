@@ -3,5 +3,7 @@
     "adb_path": "C:/Program Files/Netease/MuMuPlayerGlobal-12.0/shell/adb.exe",
     "instance_count": 5,
     "max_retry": 5,
+    "friend_time_limit": 5,
+    "pack": "a21",
     "log_level": "INFO"
 }

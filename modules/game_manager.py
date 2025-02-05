@@ -511,6 +511,46 @@ class GameManager:
 
         return True
 
+    async def data_delete(self):
+        self.log.emit(f"⏳ [인스턴스 {self.device_name}] 이미지 캐싱 중...")
+        await self.template_cache.load_all_templates()
+        self.log.emit(f"⏳ [인스턴스 {self.device_name}] 게임 시작 중...")
+        self.game.close_game(self.device_id)
+        await asyncio.sleep(2)
+        self.game.start_game(self.device_id)
+
+        # Check title screen
+        await self.find_and_tap("data/images/title.png", 5)
+
+        # Enable speed mode
+        await self.find_and_tap("data/images/mod.png", 1)
+        self.adb.simulate_swipe(self.device_id, 35, 260, 200, 260, duration=300)
+        await self.find_and_tap("data/images/mod_minimize.png", 1)
+
+        self.log.emit(f"⏳ [인스턴스 {self.device_name}] 3초 후 계정이 삭제됨.")
+        await asyncio.sleep(3)
+
+        await self.find_and_tap("data/images/menu.png", 1)
+        await asyncio.sleep(0.2)
+        await self.find_and_tap("data/images/menu_etc.png", 1)
+        await asyncio.sleep(0.2)
+        await self.find_and_tap("data/images/menu_acc.png", 1)
+        await asyncio.sleep(0.2)
+
+        await self.find_and_tap("data/images/delete_btn1.png", 1)
+        await asyncio.sleep(0.2)
+        await self.find_and_tap("data/images/delete_btn2.png", 1)
+        await asyncio.sleep(0.2)
+        await self.find_and_tap("data/images/delete_btn2.png", 1)
+        await asyncio.sleep(0.2)
+        await self.find_and_tap("data/images/delete_ok.png", 1)
+        await asyncio.sleep(0.2)
+
+        self.game.close_game(self.device_id)
+        self.game.delete_account(self.device_id)
+
+        return True
+
     async def get_random_nickname(self):
         with open("nickname.txt", "r", encoding="utf-8") as file:
             words = file.read().splitlines()

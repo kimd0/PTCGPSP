@@ -6,8 +6,9 @@ import pywinctl
 import asyncio
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, QLabel,
-    QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog, QGroupBox)
-from PyQt6.QtCore import QThread, pyqtSignal
+    QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog,
+    QDialog, QDialogButtonBox, QCheckBox, QGroupBox)
+from PyQt6.QtCore import QThread, pyqtSignal, Qt
 from modules.game_manager import GameManager
 from modules.player_manager import get_all_players
 from utils.adb_interaction import ADBInteraction
@@ -142,6 +143,8 @@ class WorkerThread(QThread):
                     self.current_task = asyncio.create_task(self.game_manager.pack_open())
                 elif self.task_kind == "add":
                     self.current_task = asyncio.create_task(self.game_manager.friend_add())
+                elif self.task_kind == "delete":
+                    self.current_task = asyncio.create_task(self.game_manager.data_delete())
                 else:
                     self.log_signal.emit(f"❌ [인스턴스 {self.device_name}] 알 수 없는 작업 종류: {self.task_kind}")
                     break
@@ -187,6 +190,37 @@ class WorkerThread(QThread):
         self.quit()  # Stop the QThread
         self.wait()  # Ensure the thread is properly cleaned up
 
+class DeviceSelectionDialog(QDialog):
+    def __init__(self, devices: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("삭제할 인스턴스 선택")
+        self.devices = devices
+        self.checkboxes = {}
+
+        layout = QVBoxLayout(self)
+
+        instruction_label = QLabel("삭제할 인스턴스를 선택하세요:")
+        layout.addWidget(instruction_label)
+
+        for device_name, device_id in self.devices.items():
+            checkbox = QCheckBox(f"{device_name} ({device_id})")
+            layout.addWidget(checkbox)
+            self.checkboxes[device_name] = checkbox
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+    def get_selected_devices(self) -> dict:
+        selected_devices = {}
+        for device_name, checkbox in self.checkboxes.items():
+            print(device_name, checkbox.isChecked())
+            if checkbox.isChecked():
+                selected_devices[device_name] = self.devices[device_name]
+        return selected_devices
 
 class SettingsWindow(QWidget):
     """GUI for modifying the JSON settings file."""
@@ -314,6 +348,11 @@ class MainGUI(QWidget):
         self.add_btn.setFixedHeight(25)
         self.add_btn.clicked.connect(self.toggle_add_task)
         macro_layout.addWidget(self.add_btn)
+
+        self.del_btn = QPushButton("일괄 계정 삭제 시작", self)
+        self.del_btn.setFixedHeight(25)
+        self.del_btn.clicked.connect(self.toggle_del_task)
+        macro_layout.addWidget(self.del_btn)
 
         macro_group.setLayout(macro_layout)
         main_layout.addWidget(macro_group)
@@ -466,6 +505,48 @@ class MainGUI(QWidget):
 
         self.is_running = not self.is_running
 
+    def select_devices(self) -> dict:
+        dialog = DeviceSelectionDialog(self.device_list, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            return dialog.get_selected_devices()
+        else:
+            return {}
+
+    def start_deletion_task(self, device_list: dict):
+        """Start automation for selected devices."""
+
+        for device_name, device_id in device_list.items():
+            worker = WorkerThread(self.game, self.adb, device_name, device_id, "delete", self.settings.get("max_retry", 3))
+            worker.log_signal.connect(self.update_log)
+            worker.finished_signal.connect(self.del_task_finished)
+            self.workers.append(worker)
+            worker.start()
+
+    def toggle_del_task(self):
+        """Toggle start and stop for automation."""
+        if self.is_running:
+            self.stop_task()
+            self.del_btn.setText("일괄 계정 삭제 시작")
+        else:
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("경고")
+            msg_box.setText("계속 진행 시 인스턴스의 데이터가 초기화됩니다.\n계속 진행하시겠습니까?")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg_box.setDefaultButton(QMessageBox.StandardButton.No)
+
+            result = msg_box.exec()
+
+            if result == QMessageBox.StandardButton.No:
+                return
+
+            devices = self.select_devices()
+            print(devices)
+            self.start_deletion_task(devices)
+            self.del_btn.setText("일괄 계정 삭제 정지")
+
+        self.is_running = not self.is_running
+
     def update_log(self, message):
         """Update the log text area."""
         self.log_text.append(message)
@@ -488,6 +569,7 @@ class MainGUI(QWidget):
             self.gather_btn.setText("팩 모으기 시작")
             self.open_btn.setEnabled(True)
             self.add_btn.setEnabled(True)
+            self.del_btn.setEnabled(True)
             with open(self.result_file_path, "w", encoding="utf-8") as f:
                 for nickname, friend_id in self.task_results:
                     f.write(f"{nickname}, {friend_id}\n")
@@ -503,6 +585,7 @@ class MainGUI(QWidget):
             self.open_btn.setText("팩 열기 시작")
             self.gather_btn.setEnabled(True)
             self.add_btn.setEnabled(True)
+            self.del_btn.setEnabled(True)
 
     def add_task_finished(self, worker):
         """Handle worker completion."""
@@ -514,6 +597,19 @@ class MainGUI(QWidget):
             self.add_btn.setText("친구 추가 시작")
             self.gather_btn.setEnabled(True)
             self.open_btn.setEnabled(True)
+            self.del_btn.setEnabled(True)
+
+    def del_task_finished(self, worker):
+        """Handle worker completion."""
+        if worker in self.workers:
+            self.workers.remove(worker)
+
+        if not self.workers:
+            self.is_running = False
+            self.del_btn.setText("일괄 계정 삭제 시작")
+            self.gather_btn.setEnabled(True)
+            self.open_btn.setEnabled(True)
+            self.add_btn.setEnabled(True)
 
     def capture_screenshot(self):
         """Capture screenshot from the first connected device."""

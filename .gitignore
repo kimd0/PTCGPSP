@@ -4,3 +4,6 @@
 /temp
 /backup
 /result
+/build
+/dist
+*.spec

@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 import random
 import asyncio
@@ -11,6 +13,11 @@ from utils.adb_interaction import ADBInteraction
 class GameManager:
     def __init__(self, game, adb, device_name, device_id, log):
         """Initialize with an instance of GameInteraction."""
+
+        self.lock = asyncio.Lock()
+        self.copy_id_event = asyncio.Event()
+        self.copy_id_event.set()
+
         self.game = game
         self.adb = adb
         self.device_name = device_name
@@ -24,7 +31,7 @@ class GameManager:
     async def pack_gather(self) -> tuple[Any, Any] | None:
         """Execute the full automated gameplay process and return success status."""
         self.log.emit(f"⏳ [인스턴스 {self.device_name}] 이미지 캐싱 중...")
-        await self.template_cache.load_all_templates()
+        cache_result = await self.template_cache.load_all_templates()
         self.log.emit(f"⏳ [인스턴스 {self.device_name}] 게임 시작 중...")
         total_start_time = time.time()  # 전체 실행 시작 시간
 
@@ -48,6 +55,9 @@ class GameManager:
         ]
 
         for step_name, step_func in steps:
+            if step_name == "아이디 복사":
+                self.log.emit(f"⏳ [인스턴스 {self.device_name}] 아이디 복사 전 클립보드 덮어쓰기 방지를 위해 대기.")
+                await self.copy_id_event.wait()
             success, elapsed_time = await log_step(step_name, step_func)
             total_elapsed += elapsed_time
             if not success:
@@ -172,7 +182,8 @@ class GameManager:
         await self.find_and_tap("data/images/nickname.png", 1)
         self.adb.simulate_tap(self.device_id, 260, 410)
         await asyncio.sleep(1)
-        self.nickname = self.get_random_nickname()
+        self.nickname = await self.get_random_nickname()
+        self.log.emit(f"⏳ [인스턴스 {self.device_name}] 닉네임: {self.nickname} 설정 중...")
         self.adb.simulate_string(self.device_id, self.nickname)
         await asyncio.sleep(0.2)
 
@@ -354,15 +365,18 @@ class GameManager:
         return True
 
     async def do_copy_id(self):
-        if not await search_until_found(self.adb, self.device_id, "data/images/home_enabled.png"):
-            print("Home screen not found.")
-            return False
-        await self.find_and_tap("data/images/social.png", 1)
-        await self.find_and_tap("data/images/social_friend.png", 1)
-        await self.find_and_tap("data/images/social_add.png", 1)
-        await self.find_and_tap("data/images/social_copy.png", 1)
-        self.friend_id = pyperclip.paste()
-        return True
+        async with self.lock:
+            self.copy_id_event.clear()
+            if not await search_until_found(self.adb, self.device_id, "data/images/home_enabled.png"):
+                print("Home screen not found.")
+                return False
+            await self.find_and_tap("data/images/social.png", 1)
+            await self.find_and_tap("data/images/social_friend.png", 1)
+            await self.find_and_tap("data/images/social_add.png", 1)
+            await self.find_and_tap("data/images/social_copy.png", 1)
+            self.friend_id = pyperclip.paste()
+            self.copy_id_event.set()
+            return True
 
     async def do_add_friend(self):
         """Execute the full automated gameplay process and return success status."""
@@ -552,7 +566,12 @@ class GameManager:
         return True
 
     async def get_random_nickname(self):
-        with open("nickname.txt", "r", encoding="utf-8") as file:
+        if getattr(sys, 'frozen', False):
+            base_path = os.path.dirname(sys.executable)
+        else:
+            base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+        nickname_txt = os.path.join(base_path, "nickname.txt")
+        with open(nickname_txt, "r", encoding="utf-8") as file:
             words = file.read().splitlines()
         return random.choice(words)
 

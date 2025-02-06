@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import subprocess
 from typing import Tuple
 from utils.config_loader import load_settings
@@ -33,7 +34,19 @@ class ADBClient:
 
         full_command = [self.adb_path] + command.split()
         try:
-            result = subprocess.run(full_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+            startupinfo = None
+            if sys.platform == "win32":
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+            result = subprocess.run(
+                full_command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                startupinfo=startupinfo
+            )
             return result.stdout.strip(), result.stderr.strip()
         except UnicodeDecodeError as e:
             logging.error(f"UnicodeDecodeError occurred: {e}")

@@ -1,14 +1,20 @@
 import json
 import os
+import sys
 import logging
 
 logging.basicConfig(level=logging.INFO)
 
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "settings.json")
+if getattr(sys, 'frozen', False):
+    base_path = os.path.dirname(sys.executable)
+else:
+    base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+
+SETTINGS_FILE = os.path.join(base_path, "config.json")
 
 def load_settings() -> dict:
     """
-    Load settings from the settings.json file.
+    Load settings from the config.json file.
 
     :return: Dictionary containing settings.
     """

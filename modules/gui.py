@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog,
     QDialog, QDialogButtonBox, QCheckBox, QGroupBox)
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
+from PyQt6.QtGui import QIcon
 from modules.game_manager import GameManager
 from modules.player_manager import get_all_players
 from utils.adb_interaction import ADBInteraction
@@ -249,12 +250,12 @@ class SettingsWindow(QWidget):
 
     def load_settings(self):
         """Load JSON settings from file."""
-        if not os.path.exists("./settings.json"):
+        if not os.path.exists("./config.json"):
             QMessageBox.critical(self, "오류", "설정 파일을 찾을 수 없음")
             return
 
         try:
-            with open("./settings.json", "r", encoding="utf-8") as file:
+            with open("./config.json", "r", encoding="utf-8") as file:
                 self.settings_data = json.load(file)
                 self.populate_table()
         except Exception as e:
@@ -288,7 +289,7 @@ class SettingsWindow(QWidget):
                 updated_data[key] = value  # Keep as string if parsing fails
 
         try:
-            with open("./settings.json", "w", encoding="utf-8") as file:
+            with open("./config.json", "w", encoding="utf-8") as file:
                 json.dump(updated_data, file, indent=4, ensure_ascii=False)
 
             QMessageBox.information(self, "성공", "세팅 저장 성공!")
@@ -309,6 +310,10 @@ class MainGUI(QWidget):
         self.settings = None
         self.settings_window = None
 
+        for widget in self.findChildren(QWidget):
+            widget.setEnabled(False)
+        self.log_text.setEnabled(True)
+
         # Start initialization in a separate thread
         self.init_thread = InitializationThread()
         self.init_thread.log_signal.connect(self.update_log)
@@ -318,7 +323,8 @@ class MainGUI(QWidget):
 
     def init_ui(self):
         """Initialize the main UI layout with grouped buttons."""
-        self.setWindowTitle("Game Automation GUI")
+        self.setWindowTitle("PTCGPSP - Challenge Racing Automator")
+        self.setWindowIcon(QIcon("data/ui/icon.ico"))
         self.setGeometry(100, 100, 500, 500)
 
         main_layout = QVBoxLayout()
@@ -361,20 +367,6 @@ class MainGUI(QWidget):
         etc_group = QGroupBox("기타", self)
         etc_layout = QVBoxLayout()
 
-        button_row = QHBoxLayout()
-
-        self.capture_btn = QPushButton("캡처(임시)", self)
-        self.capture_btn.setFixedHeight(25)
-        self.capture_btn.clicked.connect(self.capture_screenshot)
-        button_row.addWidget(self.capture_btn)
-
-        self.setting_btn = QPushButton("설정", self)
-        self.setting_btn.setFixedHeight(25)
-        self.setting_btn.clicked.connect(self.open_settings)
-        button_row.addWidget(self.setting_btn)
-
-        etc_layout.addLayout(button_row)
-
         instance_row = QHBoxLayout()
 
         self.instance_label = QLabel("인스턴스 선택", self)
@@ -401,6 +393,20 @@ class MainGUI(QWidget):
 
         etc_layout.addLayout(instance_row)
 
+        button_row = QHBoxLayout()
+
+        self.capture_btn = QPushButton("캡처", self)
+        self.capture_btn.setFixedHeight(25)
+        self.capture_btn.clicked.connect(self.capture_screenshot)
+        button_row.addWidget(self.capture_btn)
+
+        self.setting_btn = QPushButton("설정", self)
+        self.setting_btn.setFixedHeight(25)
+        self.setting_btn.clicked.connect(self.open_settings)
+        button_row.addWidget(self.setting_btn)
+
+        etc_layout.addLayout(button_row)
+
         etc_group.setLayout(etc_layout)
         main_layout.addWidget(etc_group)
 
@@ -415,6 +421,8 @@ class MainGUI(QWidget):
         self.settings = settings
         self.update_device_list()
         self.update_log("✅ 시스템 초기화 완료.")
+        for widget in self.findChildren(QWidget):
+            widget.setEnabled(True)
 
     def initialization_failed(self, error_message):
         """Called when initialization fails."""
@@ -429,7 +437,7 @@ class MainGUI(QWidget):
         if task_kind == "gather":
             self.open_btn.setEnabled(False)
             self.add_btn.setEnabled(False)
-
+            self.del_btn.setEnabled(False)
             self.task_results = []
             timestamp = datetime.datetime.now().strftime("%y%m%d%H%M%S")
             result_dir = os.path.join(os.getcwd(), "result")
@@ -438,9 +446,11 @@ class MainGUI(QWidget):
         elif task_kind == "open":
             self.gather_btn.setEnabled(False)
             self.add_btn.setEnabled(False)
+            self.del_btn.setEnabled(False)
         elif task_kind == "add":
             self.gather_btn.setEnabled(False)
             self.open_btn.setEnabled(False)
+            self.del_btn.setEnabled(False)
 
         for device_name, device_id in self.device_list.items():
             worker = WorkerThread(self.game, self.adb, device_name, device_id, task_kind, self.settings.get("max_retry", 3))
@@ -613,9 +623,12 @@ class MainGUI(QWidget):
 
     def capture_screenshot(self):
         """Capture screenshot from the first connected device."""
-        print(self.adb.is_app_running(self.device_list['1'], self.game.package_name))
-        saved_path = self.adb.take_screenshot_(self.device_list['1'], return_bitmap=False)
-        self.update_log(f"Screenshot saved at {saved_path}.")
+        instance_name = self.instance_input.currentText()
+        if instance_name not in self.device_list:
+            self.update_log(f"❌ 인스턴스 '{instance_name}'를 찾을 수 없습니다.")
+            return
+        saved_path = self.adb.take_screenshot_(self.device_list[instance_name], return_bitmap=False)
+        self.update_log(f"✅ 인스턴스 {instance_name} 스크린샷 저장 완료. (저장 위치: {saved_path})")
 
     def open_settings(self):
         """Open the settings editor."""

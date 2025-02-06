@@ -395,12 +395,23 @@ class GameManager:
         self.adb.simulate_swipe(self.device_id, 35, 260, 200, 260, duration=300)
         await self.find_and_tap("data/images/mod_minimize.png", 1)
 
+        """
         if not await search_until_found(self.adb, self.device_id, "data/images/packpoint.png"):
             print("login start screen not found.")
             return False
+        """
         await self.find_and_tap("data/images/social.png", 5)
 
+        settings = load_settings()
+        friend_time_limit = float(settings.get("friend_time_limit", 300))
+        start_time = time.time()
+
+        self.log.emit(f"⏳ [인스턴스 {self.device_name}] 친구 추가 중... (최대 {friend_time_limit} 초)")
         while True:
+            if time.time() - start_time > friend_time_limit:
+                self.log.emit(f"⏳ [인스턴스 {self.device_name}] 5분 경과, 친구 추가 종료.")
+                break
+
             await self.find_and_tap("data/images/social_friend.png", 2)
             await asyncio.sleep(0.5)
             if await count_template_matches(self.adb, self.device_id, "data/images/nine.png", 0.97, 160) == 4:

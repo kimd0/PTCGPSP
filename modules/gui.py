@@ -194,13 +194,13 @@ class WorkerThread(QThread):
 class DeviceSelectionDialog(QDialog):
     def __init__(self, devices: dict, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("삭제할 인스턴스 선택")
+        self.setWindowTitle("인스턴스 선택")
         self.devices = devices
         self.checkboxes = {}
 
         layout = QVBoxLayout(self)
 
-        instruction_label = QLabel("삭제할 인스턴스를 선택하세요:")
+        instruction_label = QLabel("인스턴스를 선택하세요:")
         layout.addWidget(instruction_label)
 
         for device_name, device_id in self.devices.items():
@@ -496,13 +496,14 @@ class MainGUI(QWidget):
     def toggle_open_task(self):
         """Toggle start and stop for automation."""
         if self.is_running:
-            self.stop_task()
-            self.open_btn.setText("팩 열기 시작")
+            devices = self.select_devices()
+            for worker in self.workers:
+                if worker.device_name in devices:
+                    worker.stop()
         else:
+            self.is_running = True
             self.start_task("open")
             self.open_btn.setText("팩 열기 정지")
-
-        self.is_running = not self.is_running
 
     def toggle_add_task(self):
         """Toggle start and stop for automation."""
